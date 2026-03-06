@@ -128,6 +128,7 @@ services:
         UID: ${UID:-1000}
         GID: ${GID:-1000}
     container_name: modest_staging
+    image: modest_staging_certifier:latest
     environment:
       TEST_FRAMEWORK: ${TEST_FRAMEWORK:-pytest}
       COMMIT_SHORT_ID: ${COMMIT_SHORT_ID:-unset}
