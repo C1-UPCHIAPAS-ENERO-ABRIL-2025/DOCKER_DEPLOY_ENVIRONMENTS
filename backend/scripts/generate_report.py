@@ -23,6 +23,9 @@ timestamp = args.timestamp
 framework = args.framework
 build_id = args.build_id
 
+# Clean up build ID for display in PDF (remove sha256: and truncate)
+display_build_id = build_id.replace("sha256:", "")[:30]
+
 def read(filename: str) -> str:
     path = os.path.join(workdir, filename)
     if os.path.exists(path):
@@ -44,7 +47,9 @@ def get_pylint_score(text):
     return match.group(1) if match else "N/A"
 
 def get_coverage_score(text):
-    match = re.search(r'TOTAL\s+\d+\s+\d+\s+(\d+)%', text)
+    # Matches unittest coverage: "TOTAL  12  3  75%" -> "75"
+    # Matches pytest coverage: "Total coverage: 72.73%" -> "72.73"
+    match = re.search(r'(?:TOTAL.*\s+|Total coverage:\s*)(\d+(\.\d+)?)%', text)
     return match.group(1) if match else "N/A"
 
 pylint_score = get_pylint_score(pylint_out)
@@ -151,7 +156,7 @@ try:
     .dashboard { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 40px; }
     .card { background: #f7fafc; padding: 20px; border-radius: 12px; border: 1px solid #edf2f7; }
     .card-label { font-size: 12px; font-weight: 600; color: #a0aec0; text-transform: uppercase; letter-spacing: 0.05em; }
-    .card-value { font-size: 20px; font-weight: 700; color: #2d3748; margin-top: 5px; }
+    .card-value { font-size: 20px; font-weight: 700; color: #2d3748; margin-top: 5px; word-break: break-word; overflow-wrap: break-word; }
     
     .status-badge { display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600; }
     .status-pass { background: #c6f6d5; color: #22543d; }
@@ -206,7 +211,7 @@ try:
             </div>
             <div class="card" style="grid-column: span 2;">
                 <div class="card-label">Docker Image ID (Build)</div>
-                <div class="card-value" style="font-size:12px; font-family: monospace; word-break: break-all;">{build_id}</div>
+                <div class="card-value" style="font-size:12px; font-family: monospace; word-break: break-all;">{display_build_id}</div>
             </div>
         </div>
 

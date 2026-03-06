@@ -72,14 +72,8 @@ if ! (cd "${PROJECT_ROOT}" && docker compose --profile staging build staging_cer
 fi
 
 # Capture the exact Image ID (SHA256) — immutable identifier of the binary
-DOCKER_IMAGE_ID=$(cd "${PROJECT_ROOT}" && \
-  docker inspect \
-    --format='{{index .RepoDigests 0}}' \
-    "$(docker compose --profile staging images -q staging_certifier)" 2>/dev/null \
-  || docker compose --profile staging images -q staging_certifier 2>/dev/null \
-  || echo "unknown")
+export DOCKER_IMAGE_ID=$(docker inspect --format='{{.Id}}' modest_staging_certifier:latest 2>/dev/null || echo "unknown")
 
-export DOCKER_IMAGE_ID
 echo "    Image ID  : ${DOCKER_IMAGE_ID}"
 
 echo ""
