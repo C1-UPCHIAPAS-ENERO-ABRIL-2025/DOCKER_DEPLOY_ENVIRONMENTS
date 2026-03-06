@@ -14,12 +14,14 @@ parser.add_argument("--workdir", required=True)
 parser.add_argument("--commit-id", required=True)
 parser.add_argument("--timestamp", required=True)
 parser.add_argument("--framework", required=True)
+parser.add_argument("--build-id", default="unknown")
 args = parser.parse_args()
 
 workdir = args.workdir
 commit_id = args.commit_id
 timestamp = args.timestamp
 framework = args.framework
+build_id = args.build_id
 
 def read(filename: str) -> str:
     path = os.path.join(workdir, filename)
@@ -56,6 +58,7 @@ md_content = f"""# 📋 Staging Certification Report
 | Field | Value |
 |-------|-------|
 | **Commit ID** | `{commit_id}` |
+| **Build ID** | `{build_id}` |
 | **Timestamp** | `{timestamp}` |
 | **Test Framework** | `{framework}` |
 | **Pylint Score** | `{pylint_score}/10` |
@@ -110,6 +113,7 @@ with open(os.path.join(workdir, "report.md"), "w", encoding="utf-8") as f:
 json_report = {
     "schema_version": "1.1",
     "commit_id": commit_id,
+    "build_id": build_id,
     "timestamp": timestamp,
     "test_framework": framework,
     "metrics": {
@@ -183,7 +187,7 @@ try:
             <div class="status-badge {status_class}">{status_text}</div>
         </div>
 
-        <div class="dashboard">
+        <div class="dashboard" style="grid-template-columns: repeat(3, 1fr);">
             <div class="card">
                 <div class="card-label">Commit ID</div>
                 <div class="card-value">{commit_id}</div>
@@ -199,6 +203,10 @@ try:
             <div class="card">
                 <div class="card-label">Coverage</div>
                 <div class="card-value">{coverage_score}%</div>
+            </div>
+            <div class="card" style="grid-column: span 2;">
+                <div class="card-label">Docker Image ID (Build)</div>
+                <div class="card-value" style="font-size:12px; font-family: monospace; word-break: break-all;">{build_id}</div>
             </div>
         </div>
 

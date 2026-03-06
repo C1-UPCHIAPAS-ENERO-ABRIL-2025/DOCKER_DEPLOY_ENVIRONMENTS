@@ -19,6 +19,7 @@ GPG_HOME="/home/devuser/.gnupg"
 
 COMMIT_SHORT_ID="${COMMIT_SHORT_ID:-$(date +%s | sha1sum | head -c 7)}"
 COMMIT_TIMESTAMP="${COMMIT_TIMESTAMP:-$(date -u +"%Y-%m-%dT%H:%M:%SZ")}"
+DOCKER_IMAGE_ID="${DOCKER_IMAGE_ID:-unknown}"
 SAFE_TIMESTAMP=$(echo "${COMMIT_TIMESTAMP}" | tr ':' '-')
 PACKAGE_NAME="evidence_${COMMIT_SHORT_ID}_${SAFE_TIMESTAMP}"
 
@@ -37,6 +38,7 @@ echo "========================================================"
 echo " 🔬 Staging Certifier — Framework: ${FRAMEWORK}"
 echo "    Commit   : ${COMMIT_SHORT_ID}"
 echo "    Time     : ${COMMIT_TIMESTAMP}"
+echo "    Image ID : ${DOCKER_IMAGE_ID}"
 echo "  ── Thresholds ────────────────────────────────────"
 echo "    pylint    : min ${PYLINT_MIN_SCORE}/10"
 echo "    mypy      : ${MYPY_MODE} mode"
@@ -44,7 +46,7 @@ echo "    coverage  : min ${COVERAGE_MIN}%"
 echo "    bandit    : level≥${BANDIT_LEVEL}, confidence≥${BANDIT_CONFIDENCE}"
 echo "    radon     : min grade ${RADON_MIN_GRADE}"
 echo "    hadolint  : fail-on≥${HADOLINT_THRESHOLD}"
-echo "========================================================"
+echo "========================================================="
 
 cd "${WORKDIR}"
 
@@ -169,7 +171,8 @@ python /app/scripts/generate_report.py \
   --workdir "${REPORTS_WORK}" \
   --commit-id "${COMMIT_SHORT_ID}" \
   --timestamp "${COMMIT_TIMESTAMP}" \
-  --framework "${FRAMEWORK}"
+  --framework "${FRAMEWORK}" \
+  --build-id "${DOCKER_IMAGE_ID}"
 
 echo "  ✅ Artifacts: report.md, report.pdf, report.json"
 
@@ -193,7 +196,7 @@ cat > "${REPORTS_WORK}/manifest.json" <<EOF
     {"name": "report.json", "digest": {"sha256": "${MD5_JSON}"}}
   ],
   "predicate": {
-    "builder": {"id": "docker://staging_certifier"},
+    "builder": {"id": "docker://staging_certifier@${DOCKER_IMAGE_ID}"},
     "buildType": "hermetic-container",
     "metadata": {
       "buildStartedOn":  "${COMMIT_TIMESTAMP}",

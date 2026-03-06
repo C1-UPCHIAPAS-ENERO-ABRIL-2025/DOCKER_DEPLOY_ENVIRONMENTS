@@ -60,21 +60,22 @@ Executes inside isolated Docker containers (zero OS dependency):
 | `pylint`   | Code quality score                | `PYLINT_MIN_SCORE=6.5`             |
 | `hadolint` | Dockerfile best practices (all 3) | `HADOLINT_FAILURE_THRESHOLD=error` |
 
-### `commit-msg` — triggered only on `[set]`-tagged commits
+### `commit-msg` — triggered only on `[STAGE]`-tagged commits
 
 ```bash
-git commit -m "feat: my feature [set]"
+git commit -m "feat: my feature [STAGE]"
 ```
 
 Launches an **ephemeral staging certifier** that:
 
-1. Runs the full static analysis pipeline
-2. Runs unit tests (Phase 2A) and integration tests if `DATABASE_URL` is set (Phase 2B)
-3. Generates artifacts (`.md`, `.pdf`, `.json`)
-4. Builds an SLSA/In-toto attestation manifest with SHA-256 hashes
-5. Signs the manifest with your GPG key (key **never** leaves the host)
-6. Packages everything into `evidence_output/evidence_<id>_<timestamp>.zip`
-7. **Aborts the commit** if any step fails
+1. Builds the certifier image and captures the **Docker Image ID** (SHA256)
+2. Runs the full static analysis pipeline
+3. Runs unit tests (Phase 2A) and integration tests if `DATABASE_URL` is set (Phase 2B)
+4. Generates artifacts (`.md`, `.pdf`, `.json`)
+5. Builds an SLSA/In-toto attestation manifest with SHA-256 hashes and the exact Image ID used
+6. Signs the manifest with your GPG key (key **never** leaves the host)
+7. Packages everything into `evidence_output/evidence_<id>_<timestamp>.zip`
+8. **Aborts the commit** if any step fails
 
 ---
 
@@ -113,13 +114,13 @@ TEST_FRAMEWORK=pytest         # pytest | unittest
 
 The `evidence_output/*.zip` contains:
 
-| File                | Description                                                            |
-| ------------------- | ---------------------------------------------------------------------- |
-| `report.md`         | Human-readable Markdown report                                         |
-| `report.pdf`        | Visual PDF rendering                                                   |
-| `report.json`       | Raw structured data                                                    |
-| `manifest.json`     | SLSA/In-toto attestation with SHA-256 hashes + quality thresholds used |
-| `manifest.json.asc` | OpenPGP detached signature of the manifest                             |
+| File                | Description                                                                  |
+| ------------------- | ---------------------------------------------------------------------------- |
+| `report.md`         | Human-readable Markdown report with Build ID                                 |
+| `report.pdf`        | Premium PDF with dashboard (Commit + Build ID)                               |
+| `report.json`       | Raw structured data (schema v1.1)                                            |
+| `manifest.json`     | SLSA/In-toto attestation — `builder.id` embeds the exact Docker Image SHA256 |
+| `manifest.json.asc` | OpenPGP detached signature of the manifest                                   |
 
 ### Verify integrity
 

@@ -60,11 +60,34 @@ export GPG_HOME
 
 # ---- Step 5: Trigger the ephemeral staging certifier ----
 echo ""
+echo "  ▶ Building staging certifier image..."
+echo "     (Capturing Image ID for evidence chain)"
+echo ""
+
+if ! (cd "${PROJECT_ROOT}" && docker compose --profile staging build staging_certifier); then
+  echo ""
+  echo "❌ [commit-msg] FAIL-SAFE: Docker build FAILED."
+  echo "   Fix the Dockerfile issues and try again."
+  exit 1
+fi
+
+# Capture the exact Image ID (SHA256) — immutable identifier of the binary
+DOCKER_IMAGE_ID=$(cd "${PROJECT_ROOT}" && \
+  docker inspect \
+    --format='{{index .RepoDigests 0}}' \
+    "$(docker compose --profile staging images -q staging_certifier)" 2>/dev/null \
+  || docker compose --profile staging images -q staging_certifier 2>/dev/null \
+  || echo "unknown")
+
+export DOCKER_IMAGE_ID
+echo "    Image ID  : ${DOCKER_IMAGE_ID}"
+
+echo ""
 echo "  ▶ Launching ephemeral staging container..."
 echo "     (Development environment is unaffected)"
 echo ""
 
-if ! (cd "${PROJECT_ROOT}" && docker compose --profile staging run --build --rm staging_certifier); then
+if ! (cd "${PROJECT_ROOT}" && docker compose --profile staging run --rm staging_certifier); then
   echo ""
   echo "❌ [commit-msg] FAIL-SAFE: Staging certification FAILED."
   echo "   The commit has been ABORTED. Fix the issues and try again."

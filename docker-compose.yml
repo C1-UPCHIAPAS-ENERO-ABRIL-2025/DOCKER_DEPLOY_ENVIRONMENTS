@@ -143,6 +143,7 @@ services:
       BANDIT_CONFIDENCE: ${BANDIT_CONFIDENCE:-LOW}
       RADON_MIN_GRADE: ${RADON_MIN_GRADE:-B}
       HADOLINT_FAILURE_THRESHOLD: ${HADOLINT_FAILURE_THRESHOLD:-error}
+      DOCKER_IMAGE_ID: ${DOCKER_IMAGE_ID:-unknown}
     volumes:
       - ./backend:/app:ro # Source code — READ ONLY
       - ./evidence_output:/evidence # Output for .zip package
