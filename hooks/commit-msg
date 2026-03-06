@@ -15,7 +15,7 @@ export MSYS2_ARG_CONV_EXCL="*"
 
 COMMIT_MSG_FILE="$1"
 COMMIT_MSG=$(cat "${COMMIT_MSG_FILE}")
-TRIGGER_TAG="[set]"
+TRIGGER_TAG="[STAGE]"
 PROJECT_ROOT="$(git rev-parse --show-toplevel)"
 
 # ---- Step 1: Intercept the event ----

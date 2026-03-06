@@ -30,7 +30,7 @@ bash scripts/install_hooks.sh
 ### 2. Start Development
 
 ```bash
-docker compose --profile development up --build
+docker compose --profile development up --build -d
 ```
 
 Access the app at **http://localhost:3000** — hot-reload active on both frontend (Vite HMR) and backend (Flask debug).
@@ -39,10 +39,10 @@ Access the app at **http://localhost:3000** — hot-reload active on both fronte
 
 ## Profiles & Ports
 
-| Profile       | Command                                           | URL                   |
-| ------------- | ------------------------------------------------- | --------------------- |
-| `development` | `docker compose --profile development up --build` | http://localhost:3000 |
-| `staging`     | triggered automatically by `[set]` commit tag     | http://localhost:3001 |
+| Profile       | Command                                              | URL                   |
+| ------------- | ---------------------------------------------------- | --------------------- |
+| `development` | `docker compose --profile development up --build -d` | http://localhost:3000 |
+| `staging`     | triggered automatically by `[STAGE]` commit tag      | http://localhost:3001 |
 
 ---
 
