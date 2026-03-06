@@ -2,44 +2,110 @@
 # ============================================================
 # hooks/pre-commit
 # Quality gate: runs mypy + pylint before every commit.
-# Install: cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+# Thresholds are read from .env (or environment variables).
+# Install: bash scripts/install_hooks.sh
 # ============================================================
 set -euo pipefail
 
+# --- MSYS/MINGW Path Conversion Fix (Windows + Git Bash) ---
+export MSYS_NO_PATHCONV=1
+export MSYS2_ARG_CONV_EXCL="*"
+
 BACKEND_DIR="$(git rev-parse --show-toplevel)/backend"
-PYLINT_MIN_SCORE=7.0
+PYTHON_IMAGE="python:3.12-slim-bookworm"
+
+# ---- Load .env thresholds (with defaults) ----
+# Source .env if present so thresholds are picked up locally
+ENV_FILE="$(git rev-parse --show-toplevel)/.env"
+if [ -f "${ENV_FILE}" ]; then
+  set -a
+  # shellcheck source=/dev/null
+  # UID and GID are bash readonly vars — skip them to avoid errors
+  source <(grep -E '^[A-Z_]+=' "${ENV_FILE}" | grep -v '^#' | grep -vE '^(UID|GID)=')
+  set +a
+fi
+
+PYLINT_MIN_SCORE="${PYLINT_MIN_SCORE:-7.0}"
+MYPY_MODE="${MYPY_MODE:-standard}"
+HADOLINT_THRESHOLD="${HADOLINT_FAILURE_THRESHOLD:-error}"
+
+# Build mypy flags based on MYPY_MODE
+MYPY_FLAGS="--ignore-missing-imports"
+if [ "${MYPY_MODE}" = "strict" ]; then
+  MYPY_FLAGS="--strict ${MYPY_FLAGS}"
+fi
 
 echo "🔍 [pre-commit] Running static analysis quality gate..."
+echo "   PYLINT_MIN_SCORE : ${PYLINT_MIN_SCORE}"
+echo "   MYPY_MODE        : ${MYPY_MODE}"
+echo "   HADOLINT         : fail-on≥${HADOLINT_THRESHOLD}"
 
-# --- mypy ---
-echo "  ▶ mypy type-checking..."
+# ---- mypy ----
+echo "  ▶ mypy type-checking (mode: ${MYPY_MODE})..."
 if ! docker run --rm \
+    --env PIP_ROOT_USER_ACTION=ignore \
+    --env PIP_DISABLE_PIP_VERSION_CHECK=1 \
     --volume "${BACKEND_DIR}:/app:ro" \
     --workdir /app \
-    "$(docker compose config --services | grep -q backend && docker compose images backend -q || echo 'python:3.12-slim')" \
-    sh -c "pip install -q mypy flask && mypy app/ --ignore-missing-imports"; then
+    "${PYTHON_IMAGE}" \
+    sh -c "pip install -q mypy flask psycopg2-binary && mypy app/ ${MYPY_FLAGS} --no-error-summary"; then
   echo "❌ [pre-commit] mypy found type errors. Commit aborted."
   exit 1
 fi
 echo "  ✅ mypy passed."
 
-# --- pylint ---
-echo "  ▶ pylint code quality..."
+# ---- pylint ----
+echo "  ▶ pylint code quality (min score: ${PYLINT_MIN_SCORE}/10)..."
 PYLINT_OUTPUT=$(docker run --rm \
+    --env PIP_ROOT_USER_ACTION=ignore \
+    --env PIP_DISABLE_PIP_VERSION_CHECK=1 \
     --volume "${BACKEND_DIR}:/app:ro" \
     --workdir /app \
-    "python:3.12-slim" \
-    sh -c "pip install -q pylint flask && pylint app/ --output-format=text" 2>&1 || true)
+    "${PYTHON_IMAGE}" \
+    sh -c "pip install -q pylint flask psycopg2-binary && pylint app/ --output-format=text --score=y" 2>&1 || true)
 
-PYLINT_SCORE=$(echo "${PYLINT_OUTPUT}" | grep -oP '(?<=rated at )[0-9.]+' || echo "0")
+echo "${PYLINT_OUTPUT}"
 
-echo "  pylint score: ${PYLINT_SCORE}/10"
+PYLINT_SCORE=$(echo "${PYLINT_OUTPUT}" | grep -oP 'rated at \K[0-9]+(\.[0-9]+)?' | head -1 || echo "0")
+PYLINT_SCORE="${PYLINT_SCORE:-0}"
 
-if (( $(echo "${PYLINT_SCORE} < ${PYLINT_MIN_SCORE}" | bc -l) )); then
-  echo "❌ [pre-commit] pylint score ${PYLINT_SCORE} is below threshold ${PYLINT_MIN_SCORE}. Commit aborted."
+echo "  pylint score: ${PYLINT_SCORE}/10 (minimum: ${PYLINT_MIN_SCORE})"
+
+PASSES=$(awk -v score="${PYLINT_SCORE}" -v min="${PYLINT_MIN_SCORE}" \
+  'BEGIN { print (score+0 >= min+0) ? "yes" : "no" }')
+
+if [ "${PASSES}" != "yes" ]; then
+  echo "❌ [pre-commit] pylint score ${PYLINT_SCORE} is below threshold ${PYLINT_MIN_SCORE}/10. Commit aborted."
   exit 1
 fi
 
 echo "  ✅ pylint passed."
+
+# ---- hadolint (Dockerfile linter) ----
+# Runs via docker run — zero OS dependency
+ROOT_DIR="$(git rev-parse --show-toplevel)"
+HADOLINT_IMAGE="hadolint/hadolint:latest"
+HADOLINT_FAILED=0
+
+echo "  ▶ hadolint (Dockerfile linter, fail-on≥${HADOLINT_THRESHOLD})..."
+for DOCKERFILE in backend/Dockerfile frontend/Dockerfile nginx/Dockerfile; do
+  if [ -f "${ROOT_DIR}/${DOCKERFILE}" ]; then
+    echo "    checking ${DOCKERFILE}..."
+    if ! docker run --rm \
+        --volume "${ROOT_DIR}/${DOCKERFILE}:/Dockerfile:ro" \
+        "${HADOLINT_IMAGE}" \
+        hadolint --failure-threshold "${HADOLINT_THRESHOLD}" /Dockerfile; then
+      echo "    ❌ hadolint: issues found in ${DOCKERFILE}"
+      HADOLINT_FAILED=1
+    fi
+  fi
+done
+
+if [ "${HADOLINT_FAILED}" = "1" ]; then
+  echo "❌ [pre-commit] hadolint found Dockerfile issues. Commit aborted."
+  exit 1
+fi
+echo "  ✅ hadolint passed."
+
 echo "✅ [pre-commit] All quality checks passed. Proceeding with commit."
 exit 0

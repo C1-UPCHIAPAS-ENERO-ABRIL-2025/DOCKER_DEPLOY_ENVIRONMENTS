@@ -28,7 +28,7 @@ services:
     networks:
       - backend-db
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-modestuser}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-modestuser} -d ${POSTGRES_DB:-modestdb}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -37,7 +37,7 @@ services:
       - staging
     logging: *default-logging
 
-  # ---- Backend Flask (development) ----
+  # ---- Backend Flask (development + staging) ----
   backend:
     build:
       context: ./backend
@@ -52,7 +52,7 @@ services:
       FLASK_ENV: development
       DATABASE_URL: postgresql://${POSTGRES_USER:-modestuser}:${POSTGRES_PASSWORD:-modestpass}@db:5432/${POSTGRES_DB:-modestdb}
     volumes:
-      - ./backend:/app # Symbolic volume for hot-reload
+      - ./backend:/app # Symbolic volume for hot-reload (in dev; ignored in staging)
     networks:
       - frontend-backend
       - backend-db
@@ -61,6 +61,7 @@ services:
         condition: service_healthy
     profiles:
       - development
+      - staging
     logging: *default-logging
 
   # ---- Frontend React/Vite (development) ----
@@ -80,7 +81,7 @@ services:
       - development
     logging: *default-logging
 
-  # ---- Nginx Reverse Proxy (development — sole internet gateway) ----
+  # ---- Nginx Gateway (Development) ----
   nginx:
     build:
       context: ./nginx
@@ -88,7 +89,7 @@ services:
     container_name: modest_nginx
     restart: unless-stopped
     ports:
-      - "${NGINX_PORT:-8080}:80" # ONLY exposed port
+      - "${NGINX_PORT:-3000}:80"
     networks:
       - frontend-backend
     depends_on:
@@ -96,6 +97,21 @@ services:
       - backend
     profiles:
       - development
+    logging: *default-logging
+
+  # ---- Nginx Gateway (Staging / Ephemeral Build Test) ----
+  nginx_staging:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: modest_nginx_staging
+    restart: unless-stopped
+    ports:
+      - "${NGINX_PORT_STAGING:-3001}:80"
+    networks:
+      - frontend-backend
+    profiles:
+      - staging
     logging: *default-logging
 
   # ============================================================
@@ -117,6 +133,16 @@ services:
       COMMIT_SHORT_ID: ${COMMIT_SHORT_ID:-unset}
       COMMIT_TIMESTAMP: ${COMMIT_TIMESTAMP:-unset}
       GPG_KEY_ID: ${GPG_KEY_ID:-}
+      # DATABASE_URL enables Phase 2B integration tests inside the certifier
+      DATABASE_URL: postgresql://${POSTGRES_USER:-modestuser}:${POSTGRES_PASSWORD:-modestpass}@db:5432/${POSTGRES_DB:-modestdb}
+      # ---- Configurable quality thresholds ----
+      PYLINT_MIN_SCORE: ${PYLINT_MIN_SCORE:-7.0}
+      MYPY_MODE: ${MYPY_MODE:-standard}
+      COVERAGE_MIN: ${COVERAGE_MIN:-70}
+      BANDIT_LEVEL: ${BANDIT_LEVEL:-LOW}
+      BANDIT_CONFIDENCE: ${BANDIT_CONFIDENCE:-LOW}
+      RADON_MIN_GRADE: ${RADON_MIN_GRADE:-B}
+      HADOLINT_FAILURE_THRESHOLD: ${HADOLINT_FAILURE_THRESHOLD:-error}
     volumes:
       - ./backend:/app:ro # Source code — READ ONLY
       - ./evidence_output:/evidence # Output for .zip package

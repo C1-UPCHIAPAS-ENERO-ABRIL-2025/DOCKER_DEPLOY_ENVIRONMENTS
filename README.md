@@ -31,7 +31,7 @@ bash scripts/install_hooks.sh
 docker compose --profile development up --build
 ```
 
-Access the app at **http://localhost:8080**
+Access the app at **http://localhost:3000**
 
 Hot-reload is active for both frontend (Vite HMR) and backend (Flask debug mode) via symbolic volume mounts.
 

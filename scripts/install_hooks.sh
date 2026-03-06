@@ -1,26 +1,29 @@
 #!/usr/bin/env bash
 # ============================================================
 # scripts/install_hooks.sh
-# Copies the hooks from /hooks into .git/hooks and makes them executable.
-# Run once after cloning: bash scripts/install_hooks.sh
+# Configures Git to use the project's hooks/ directory directly.
+#
+# Run once after cloning:
+#   bash scripts/install_hooks.sh
 # ============================================================
 set -euo pipefail
 
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-HOOKS_SRC="${PROJECT_ROOT}/hooks"
-HOOKS_DST="${PROJECT_ROOT}/.git/hooks"
+echo "🔗 Configuring Git hooks path..."
 
-echo "🔗 Installing Git hooks..."
+# Point Git to the versioned hooks/ folder (relative path — works on all OSes)
+git config core.hooksPath hooks
 
-for hook in pre-commit commit-msg; do
-  if [ -f "${HOOKS_SRC}/${hook}" ]; then
-    cp "${HOOKS_SRC}/${hook}" "${HOOKS_DST}/${hook}"
-    chmod +x "${HOOKS_DST}/${hook}"
-    echo "  ✅ ${hook} installed."
-  else
-    echo "  ⚠️  ${hook} not found in ${HOOKS_SRC}; skipping."
-  fi
-done
+# On Windows (NTFS), chmod does NOT set the git executable bit.
+# git update-index --chmod=+x is the correct way to mark hooks as executable
+# so that Git for Windows will actually run them.
+git update-index --chmod=+x hooks/pre-commit
+git update-index --chmod=+x hooks/commit-msg
 
+# Also try chmod for Linux/macOS compatibility (harmless if NTFS ignores it)
+chmod +x hooks/pre-commit hooks/commit-msg 2>/dev/null || true
+
+echo "  ✅ Git will now use hooks from: hooks/"
+echo "  ✅ Executable bit set in git index (Windows compatible)"
 echo ""
-echo "✅ Git hooks installed successfully."
+echo "✅ Done! No need to run this script again after updating hooks."
+echo "   Hook changes take effect immediately."
