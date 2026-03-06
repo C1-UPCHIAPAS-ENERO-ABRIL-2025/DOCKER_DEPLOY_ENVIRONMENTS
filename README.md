@@ -86,9 +86,9 @@ All thresholds are passed into the staging container and recorded in the SLSA ma
 PYLINT_MIN_SCORE=6.5          # 0.0–10.0
 MYPY_MODE=standard            # standard | strict
 COVERAGE_MIN=70               # 0–100 (%)
-BANDIT_LEVEL=LOW              # LOW | MEDIUM | HIGH
-BANDIT_CONFIDENCE=LOW         # LOW | MEDIUM | HIGH
-RADON_MIN_GRADE=B             # A | B | C | D
+BANDIT_LEVEL=low              # low | medium | high
+BANDIT_CONFIDENCE=low         # low | medium | high
+RADON_MIN_GRADE=b             # a | b | c | d
 HADOLINT_FAILURE_THRESHOLD=error  # error | warning | info | style | ignore
 TEST_FRAMEWORK=pytest         # pytest | unittest
 ```
