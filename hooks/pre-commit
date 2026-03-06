@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# ============================================================
+# hooks/pre-commit
+# Quality gate: runs mypy + pylint before every commit.
+# Install: cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+# ============================================================
+set -euo pipefail
+
+BACKEND_DIR="$(git rev-parse --show-toplevel)/backend"
+PYLINT_MIN_SCORE=7.0
+
+echo "🔍 [pre-commit] Running static analysis quality gate..."
+
+# --- mypy ---
+echo "  ▶ mypy type-checking..."
+if ! docker run --rm \
+    --volume "${BACKEND_DIR}:/app:ro" \
+    --workdir /app \
+    "$(docker compose config --services | grep -q backend && docker compose images backend -q || echo 'python:3.12-slim')" \
+    sh -c "pip install -q mypy flask && mypy app/ --ignore-missing-imports"; then
+  echo "❌ [pre-commit] mypy found type errors. Commit aborted."
+  exit 1
+fi
+echo "  ✅ mypy passed."
+
+# --- pylint ---
+echo "  ▶ pylint code quality..."
+PYLINT_OUTPUT=$(docker run --rm \
+    --volume "${BACKEND_DIR}:/app:ro" \
+    --workdir /app \
+    "python:3.12-slim" \
+    sh -c "pip install -q pylint flask && pylint app/ --output-format=text" 2>&1 || true)
+
+PYLINT_SCORE=$(echo "${PYLINT_OUTPUT}" | grep -oP '(?<=rated at )[0-9.]+' || echo "0")
+
+echo "  pylint score: ${PYLINT_SCORE}/10"
+
+if (( $(echo "${PYLINT_SCORE} < ${PYLINT_MIN_SCORE}" | bc -l) )); then
+  echo "❌ [pre-commit] pylint score ${PYLINT_SCORE} is below threshold ${PYLINT_MIN_SCORE}. Commit aborted."
+  exit 1
+fi
+
+echo "  ✅ pylint passed."
+echo "✅ [pre-commit] All quality checks passed. Proceeding with commit."
+exit 0

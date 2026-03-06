@@ -1,0 +1,16 @@
+# Static analysis
+mypy>=1.9.0
+pylint>=3.0.0
+radon>=6.0.0
+bandit>=1.8.0
+
+# Testing - Capa A (Unittest)
+coverage>=7.0.0
+
+# Testing - Capa B (Pytest)
+pytest>=8.0.0
+pytest-cov>=4.0.0
+
+# Report generation
+jinja2>=3.1.0
+weasyprint>=62.0

@@ -1,0 +1,5 @@
+[MASTER]
+fail-under=7.0
+
+[FORMAT]
+max-line-length=100

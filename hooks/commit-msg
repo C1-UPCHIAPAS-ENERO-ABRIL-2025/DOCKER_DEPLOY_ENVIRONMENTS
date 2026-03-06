@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# ============================================================
+# hooks/commit-msg
+# Intercepts commits tagged with [set] and triggers the
+# ephemeral staging certifier. Fail-safe: aborts commit on
+# any failure (non-zero exit code from the container).
+#
+# Install:
+#   cp hooks/commit-msg .git/hooks/commit-msg
+#   chmod +x .git/hooks/commit-msg
+# ============================================================
+set -euo pipefail
+
+COMMIT_MSG_FILE="$1"
+COMMIT_MSG=$(cat "${COMMIT_MSG_FILE}")
+TRIGGER_TAG="[set]"
+PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+
+# ---- Step 1: Intercept the event ----
+if ! echo "${COMMIT_MSG}" | grep -qF "${TRIGGER_TAG}"; then
+  # No trigger tag — allow commit, nothing to do
+  exit 0
+fi
+
+echo ""
+echo "🚀 [commit-msg] '${TRIGGER_TAG}' detected. Initiating ephemeral certification..."
+echo ""
+
+# ---- Step 2: Extract context (Short ID + ISO-8601 Timestamp) ----
+# Use a temporary hash of current HEAD ~or a random ID for first commits
+COMMIT_SHORT_ID=$(git rev-parse --short HEAD 2>/dev/null || date +%s | sha256sum | head -c 7)
+COMMIT_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+echo "  ▶ Commit context:"
+echo "    Short ID  : ${COMMIT_SHORT_ID}"
+echo "    Timestamp : ${COMMIT_TIMESTAMP}"
+
+# ---- Step 3: Validate preconditions (Fail-Safe) ----
+GPG_HOME="${GPG_HOME:-${HOME}/.gnupg}"
+if [ ! -d "${GPG_HOME}" ]; then
+  echo "❌ [commit-msg] FAIL-SAFE: GPG keystore not found at '${GPG_HOME}'."
+  echo "   Run 'bash scripts/init_dev.sh' to configure your identity."
+  exit 1
+fi
+
+# ---- Step 4: Inject environment variables for docker-compose ----
+# Export variables so docker compose inherits them
+export COMMIT_SHORT_ID
+export COMMIT_TIMESTAMP
+export GPG_HOME
+
+# ---- Step 5: Trigger the ephemeral staging certifier ----
+# Uses `run --rm` — this container will be DESTROYED after execution.
+# It does NOT stop the development stack.
+echo ""
+echo "  ▶ Launching ephemeral staging container..."
+echo "     (Development environment is unaffected)"
+echo ""
+
+if ! (cd "${PROJECT_ROOT}" && docker compose --profile staging run --rm staging_certifier); then
+  echo ""
+  echo "❌ [commit-msg] FAIL-SAFE: Staging certification FAILED."
+  echo "   The commit has been ABORTED. Fix the issues and try again."
+  exit 1
+fi
+
+# ---- Step 6: Allow commit to proceed ----
+echo ""
+echo "✅ [commit-msg] Certification complete. Evidence package saved to evidence_output/"
+echo "   Allowing commit to proceed."
+exit 0

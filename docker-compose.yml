@@ -1,0 +1,142 @@
+# ============================================================
+# Docker Compose - Multi-Profile Orchestration
+# ============================================================
+# Usage:
+#   Development:  docker compose --profile development up
+#   Staging:      docker compose --profile staging run --rm staging_certifier
+# ============================================================
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  # ---- Database (backbone: both development and staging)----
+  db:
+    image: postgres:16-alpine
+    container_name: modest_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-modestdb}
+      POSTGRES_USER: ${POSTGRES_USER:-modestuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-modestpass}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./docker/db_init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    networks:
+      - backend-db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-modestuser}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    profiles:
+      - development
+      - staging
+    logging: *default-logging
+
+  # ---- Backend Flask (development) ----
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: app
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    container_name: modest_backend
+    restart: unless-stopped
+    environment:
+      FLASK_ENV: development
+      DATABASE_URL: postgresql://${POSTGRES_USER:-modestuser}:${POSTGRES_PASSWORD:-modestpass}@db:5432/${POSTGRES_DB:-modestdb}
+    volumes:
+      - ./backend:/app # Symbolic volume for hot-reload
+    networks:
+      - frontend-backend
+      - backend-db
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles:
+      - development
+    logging: *default-logging
+
+  # ---- Frontend React/Vite (development) ----
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: dev
+    container_name: modest_frontend
+    restart: unless-stopped
+    volumes:
+      - ./frontend:/app # Symbolic volume for hot-reload
+      - /app/node_modules # Preserve container node_modules
+    networks:
+      - frontend-backend
+    profiles:
+      - development
+    logging: *default-logging
+
+  # ---- Nginx Reverse Proxy (development — sole internet gateway) ----
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: modest_nginx
+    restart: unless-stopped
+    ports:
+      - "${NGINX_PORT:-8080}:80" # ONLY exposed port
+    networks:
+      - frontend-backend
+    depends_on:
+      - frontend
+      - backend
+    profiles:
+      - development
+    logging: *default-logging
+
+  # ============================================================
+  # ---- Staging Certifier — Ephemeral Clean Room Container ----
+  # ============================================================
+  # Run with: docker compose --profile staging run --rm staging_certifier
+  # The development stack is NOT affected.
+  staging_certifier:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: ${TEST_FRAMEWORK:-pytest}-stage # Dynamic: 'unittest-stage' or 'pytest-stage'
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    container_name: modest_staging
+    environment:
+      TEST_FRAMEWORK: ${TEST_FRAMEWORK:-pytest}
+      COMMIT_SHORT_ID: ${COMMIT_SHORT_ID:-unset}
+      COMMIT_TIMESTAMP: ${COMMIT_TIMESTAMP:-unset}
+      GPG_KEY_ID: ${GPG_KEY_ID:-}
+    volumes:
+      - ./backend:/app:ro # Source code — READ ONLY
+      - ./evidence_output:/evidence # Output for .zip package
+      - ${GPG_HOME:-~/.gnupg}:/home/devuser/.gnupg:ro # GPG identity — READ ONLY
+    networks:
+      - backend-db # Needed only if integration tests require DB
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles:
+      - staging
+    logging: *default-logging
+
+volumes:
+  db_data:
+
+networks:
+  frontend-backend:
+    driver: bridge
+    internal: false # Nginx bridges to host, others are isolated logically via Docker
+  backend-db:
+    driver: bridge
+    internal: true # Completely isolated from internet
